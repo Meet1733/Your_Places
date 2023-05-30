@@ -1,42 +1,45 @@
 const uuid = require('uuid').v4;
 const { validationResult } = require('express-validator');
+const mongoose = require('mongoose');
 
 const HttpError = require('../models/http-error');
 const getCoordsForAddress = require('../util/location');
+const Place = require('../models/place');
+const User = require('../models/user');
 
-let DUMMY_PLACES = [
-    {
-        id: "p1",
-        title: "Rajkot",
-        description: "One of the best city in gujarat and my home city",
-        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/High_street_-_150_ft_Ring_road_Rajkot.jpg/200px-High_street_-_150_ft_Ring_road_Rajkot.jpg",
-        address: "Rajkot, Gujarat, India",
-        location: {
-            lat: 22.273487,
-            lng: 70.8212963,
-        },
-        creator: "u1",
-    }
-]
-
-function getPlaceById(req, res, next) {
+async function getPlaceById(req, res, next) {
     const placeId = req.params.pid; //{pid: 'p1'}
-    const place = DUMMY_PLACES.find(p => {
-        return p.id === placeId;
-    })
 
-    if (!place) {
-        throw new HttpError('Could not find a place for the provided id.', 404);
+    let place;
+    try {
+        place = await Place.findById(placeId);
+    } catch (err) { //this is server error which may be cause by monogo
+        const error = new HttpError(
+            'Something went wrong, could not find a place.', 500
+        );
+
+        return next(error); //use to stop application
     }
 
-    res.json({ place });
-}
+    if (!place) {  //this error is due to error in providing placeId
+        const error = new HttpError('Could not find a place for the provided id.', 404);
+        return next(error);
+    }
 
-function getPlacesByUserId(req, res, next) {
+    res.json({ place: place.toObject({ getters: true }) }); //converted place to normal javascript object
+}                                                         //getters: true is used to add id to each object by mongoose
+
+async function getPlacesByUserId(req, res, next) {
     const userId = req.params.uid;
-    const places = DUMMY_PLACES.filter(p => {
-        return p.creator === userId;
-    })
+
+    let places;
+    try {
+        places = await Place.find({ creator: userId });
+    } catch (err) {
+        const error = new HttpError('Fetching places failed, please try again later', 500);
+        return next(error);
+    }
+
 
     if (!places || places.length === 0) {
         return next(
@@ -44,7 +47,7 @@ function getPlacesByUserId(req, res, next) {
         );
     }
 
-    res.json({ places });
+    res.json({ places: places.map(place => place.toObject({ getters: true })) });
 }
 
 async function createPlace(req, res, next) {
@@ -58,7 +61,7 @@ async function createPlace(req, res, next) {
 
     const { title, description, address, creator } = req.body; //const title = req.body.title
 
-    let coordinates;
+    let coordinates;  //For getting coordinated based on address
     try {
         coordinates = await getCoordsForAddress(address);
     } catch (error) {
@@ -66,52 +69,127 @@ async function createPlace(req, res, next) {
     }
 
 
-    const createdPlace = {
-        id: uuid(),
-        title,  //title: title, notation and data is same
+    const createdPlace = new Place({
+        title,
         description,
-        location: coordinates,
         address,
+        location: coordinates,
+        image: 'https://avatars.githubusercontent.com/u/112953572?v=4',
         creator
+    });
+
+    let user;
+
+    try {
+        user = await User.findById(creator);
+
+    } catch (err) {
+        const error = new HttpError(
+            'Creating place failed, please try again', 500
+        )
+        return next(error);
     }
 
-    DUMMY_PLACES.push(createdPlace);
+    if (!user) {
+        const error = new HttpError(
+            'Could not find user for provided id', 404
+        );
+        return next(error);
+    }
 
-    console.log(createdPlace);
+    console.log(user);
 
-    res.status(201).json({ place: createPlace });
+    try {
+        const sess = await mongoose.startSession();  //if all the task in a session are successfull then only it will make changes
+        sess.startTransaction();                     //if there is any error in any task then it will automatically roll back by mongoose
+        await createdPlace.save({ session: sess });
+        user.places.push(createdPlace);  //Adding places to particular user
+        await user.save({ session: sess });
+        await sess.commitTransaction();
+    } catch (err) {
+        const error = new HttpError(
+            'Creating place failed, please try again',
+            500
+        );
+        return next(error);
+    }
+
+    res.status(201).json({ place: createdPlace });
 }
 
-function updatePlaceById(req, res, next) {
+async function updatePlaceById(req, res, next) {
 
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
         console.log(errors);
-        throw new HttpError('Invalid inputs passed, please check your data', 422);
+        return next(
+            new HttpError('Invalid inputs passed, please check your data', 422)
+        )
     }
 
     const { title, description } = req.body;
     const placeId = req.params.pid;
 
-    const updatedPlace = { ...DUMMY_PLACES.find(p => p.id === placeId) }; //We can write this short form for returning one statement
-    const placeIndex = DUMMY_PLACES.findIndex(p => p.id === placeId);
-    updatedPlace.title = title;
-    updatedPlace.description = description;
-
-    DUMMY_PLACES[placeIndex] = updatedPlace;
-
-    res.status(200).json({ place: updatedPlace });
-}
-
-function deletePlace(req, res, next) {
-    const placeId = req.params.pid;
-
-    if (!DUMMY_PLACES.find(p => p.id === placeId)) {
-        throw new HttpError('Could not find a place for that id.', 404)
+    let place;
+    try {
+        place = await Place.findById(placeId);
+    } catch (err) {
+        const error = new HttpError(
+            'Something went wrong, could not update place.', 500
+        );
+        return next(error);
     }
 
-    DUMMY_PLACES = DUMMY_PLACES.filter(p => p.id !== placeId);
+    place.title = title;
+    place.description = description;
+
+    try {
+        await place.save();
+    } catch (err) {
+        const error = new HttpError(
+            'Something went wrong, could not update place.', 500
+        );
+        return next(error);
+    }
+
+    res.status(200).json({ place: place.toObject({ getters: true }) });
+}
+
+async function deletePlace(req, res, next) {
+    const placeId = req.params.pid;
+
+    let place;
+    try {
+        place = await Place.findById(placeId).populate('creator');
+    } catch (err) {
+        const error = new HttpError(
+            'Something went wrong, could not delete place.', 500
+        );
+        return next(error);
+    }
+
+    if (!place) {
+        const error = new HttpError(
+            'Could not find place for this id.', 404
+        );
+        return next(error);
+    }
+
+    try {
+        const sess = await mongoose.startSession();
+        sess.startTransaction();
+        await place.deleteOne({ session: sess });
+        place.creator.places.pull(place); //pull will automatically remove the place from array
+        await place.creator.save({ session: sess }); //Saving the user data
+        await sess.commitTransaction();
+    } catch (err) {
+        const error = new HttpError(
+            'Something went wrong, could not delete place.', 500
+        );
+        return next(error);
+    }
+
     res.status(200).json({ message: 'Deleted Place' });
 }
 
@@ -129,3 +207,7 @@ exports.deletePlace = deletePlace;
 // ... is used to create a new copy of the same place
 // const store the address of the object not the actual object that's why we can change it's value
 //using express-validator, a third party library for validation
+
+//populate allows us to refer to a document stored in different collection
+//abd to work with data in that existing document of that collection
+//to do so we need a relation between both collection which is established using "ref" we used earlier

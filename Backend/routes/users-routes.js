@@ -22,5 +22,3 @@ router.post('/signup',
 router.post('/login', usersControllers.login);
 
 module.exports = router;
-
-//here we are using getPlaceById as pointer so we do not have to call it as a function
