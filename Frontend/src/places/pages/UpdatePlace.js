@@ -1,45 +1,24 @@
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import React, { useEffect, useState, useContext } from "react";
+import { useParams, useHistory } from "react-router-dom";
 
 import Input from "../../shared/components/FormElements/Input";
 import Button from "../../shared/components/FormElements/Button";
+import ErrorModal from "../../shared/components/UIElements/ErrorModal";
+import LoadingSpinner from "../../shared/components/UIElements/LoadingSpinner";
 import { VALIDATOR_MINLENGTH, VALIDATOR_REQUIRE } from "../../shared/util/validators";
 import { useForm } from "../../shared/hooks/form-hooks";
+import { useHttpClient } from "../../shared/hooks/http-hook";
+import { AuthContext } from "../../shared/context/auth-context";
 import Card from "../../shared/components/UIElements/Card";
 import "./PlaceForm.css"
 
-const DUMMY_PLACES = [
-    {
-        id: "p1",
-        title: "Rajkot",
-        description: "One of the best city in gujarat and my home city",
-        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/High_street_-_150_ft_Ring_road_Rajkot.jpg/200px-High_street_-_150_ft_Ring_road_Rajkot.jpg",
-        address: "Rajkot, Gujarat, India",
-        location: {
-            lat: 22.273487,
-            lng: 70.8212963,
-        },
-        creator: "u1",
-    },
-    {
-        id: "p2",
-        title: "Rajkot 2.0",
-        description: "One of the best city in gujarat and my home city",
-        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/High_street_-_150_ft_Ring_road_Rajkot.jpg/200px-High_street_-_150_ft_Ring_road_Rajkot.jpg",
-        address: "Rajkot, Gujarat, India",
-        location: {
-            lat: 22.273487,
-            lng: 70.8212963,
-        },
-        creator: "u2",
-    },
-];
-
 function UpdatePlace() {
 
-    const [isLoading, setIsLoading] = useState(false);
-
+    const auth = useContext(AuthContext);
+    const { isLoading, error, sendRequest, clearError } = useHttpClient();
+    const [loadedPlaces, setLoadedPlaces] = useState();
     const placeId = useParams().placeId;
+    const history = useHistory();
 
     const [formState, inputHandler, setFormData] = useForm({
         title: {
@@ -52,31 +31,58 @@ function UpdatePlace() {
         }
     }, false)
 
-    const identifiedPlace = DUMMY_PLACES.find(p => p.id === placeId);
-
     useEffect(() => {
-        if (identifiedPlace) {
-            setFormData({
-                title: {
-                    value: identifiedPlace.title,
-                    isValid: true
-                },
-                description: {
-                    value: identifiedPlace.description,
-                    isValid: true
-                }
-            }, true);
+        async function fetchPlace() {
+            try {
+                const responseData = await sendRequest(
+                    `http://localhost:5000/api/places/${placeId}`
+                )
+                setLoadedPlaces(responseData.place);
+                setFormData({
+                    title: {
+                        value: responseData.place.title,
+                        isValid: true
+                    },
+                    description: {
+                        value: responseData.place.description,
+                        isValid: true
+                    }
+                }, true);
+            } catch (err) {
+            }
         }
-        setIsLoading(true);
-    }, [setFormData, identifiedPlace])
+        fetchPlace();
+    }, [sendRequest, placeId, setFormData]);
 
 
-    function placeUpdateSubmitHandler(event) {
+    async function placeUpdateSubmitHandler(event) {
         event.preventDefault();
-        console.log(formState.inputs);
+        try {
+            await sendRequest(
+                `http://localhost:5000/api/places/${placeId}`,
+                'PATCH',
+                JSON.stringify({
+                    title: formState.inputs.title.value,
+                    description: formState.inputs.description.value
+                }),
+                {
+                    'Content-type': 'application/json'
+                }
+            )
+            history.push('/' + auth.userId + '/places');
+        } catch (err) {
+        }
     }
 
-    if (!identifiedPlace) {
+    if (isLoading) {
+        return (
+            <div className="center">
+                <LoadingSpinner />
+            </div>
+        )
+    }
+
+    if (!loadedPlaces && !error) {
         return <div className="center">
             <Card>
                 <h2>Could not find that place!</h2>
@@ -84,37 +90,36 @@ function UpdatePlace() {
         </div>
     }
 
-    if (!isLoading) {
-        return (
-            <div className="center">
-                <h2>Loading...</h2>
-            </div>
-        )
-    }
-    return <form className="place-form" onSubmit={placeUpdateSubmitHandler}>
-        <Input
-            id="title"
-            element="input"
-            type="text"
-            label="Title"
-            validators={[VALIDATOR_REQUIRE()]}
-            errorText="Please enter a valifd title."
-            onInput={inputHandler}
-            initialValue={formState.inputs.title.value}
-            initialValid={formState.inputs.title.isValid}
-        />
-        <Input
-            id="description"
-            element="textarea"
-            label="Description"
-            validators={[VALIDATOR_MINLENGTH(5)]}
-            errorText="Please enter a valid description (min. 5 characters)."
-            onInput={inputHandler}
-            initialValue={formState.inputs.description.value}
-            initialValid={formState.inputs.description.isValid}
-        />
-        <Button type="submit" disabled={!formState.isValid}>UPDATE PLACE</Button>
-    </form>
+    return (
+        <React.Fragment>
+            <ErrorModal error={error} onClear={clearError} />
+            {!isLoading && loadedPlaces && (
+                <form className="place-form" onSubmit={placeUpdateSubmitHandler}>
+                    <Input
+                        id="title"
+                        element="input"
+                        type="text"
+                        label="Title"
+                        validators={[VALIDATOR_REQUIRE()]}
+                        errorText="Please enter a valifd title."
+                        onInput={inputHandler}
+                        initialValue={loadedPlaces.title}
+                        initialValid={true}
+                    />
+                    <Input
+                        id="description"
+                        element="textarea"
+                        label="Description"
+                        validators={[VALIDATOR_MINLENGTH(5)]}
+                        errorText="Please enter a valid description (min. 5 characters)."
+                        onInput={inputHandler}
+                        initialValue={loadedPlaces.description}
+                        initialValid={true}
+                    />
+                    <Button type="submit" disabled={!formState.isValid}>UPDATE PLACE</Button>
+                </form>)}
+        </React.Fragment>
+    )
 }
 export default UpdatePlace
 

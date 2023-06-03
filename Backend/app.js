@@ -10,6 +10,13 @@ const app = express();
 
 app.use(bodyParser.json());
 
+app.use((req, res, next) => {  //used to solve error provided by browser 
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE');
+    next();
+})
+
 app.use('/api/places', placesRoutes); // /api/places/...
 app.use('/api/users', usersRoutes);
 
@@ -28,7 +35,7 @@ app.use((error, req, res, next) => {  //will run if any middleware causes error
 })
 
 mongoose
-    .connect('mongodb+srv://harsodameet002:WpFrqRRbIBYFGxCs@cluster0.sodeu1r.mongodb.net/places?retryWrites=true&w=majority')
+    .connect('mongodb+srv://harsodameet002:WpFrqRRbIBYFGxCs@cluster0.sodeu1r.mongodb.net/mern?retryWrites=true&w=majority')
     .then(() => {
         app.listen(5000);
     })
@@ -41,3 +48,6 @@ mongoose
 //as error handling middleware function
 
 //If connection to mongoose is successfull then we will start our backend server
+
+//According to browser the request from api should also be from the same server
+//So to solve this we wrote three res.headers
