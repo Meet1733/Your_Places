@@ -36,7 +36,8 @@ function Auth() {
             setFormData(
                 {
                     ...formState.inputs,
-                    name: undefined
+                    name: undefined,
+                    image: undefined
                 },
                 formState.inputs.email.isValid && formState.inputs.password.isValid)
         } else {
@@ -44,6 +45,10 @@ function Auth() {
                 ...formState.inputs,
                 name: {
                     value: '',
+                    isValid: false
+                },
+                image: {
+                    value: null,
                     isValid: false
                 }
             }, false)
@@ -67,27 +72,25 @@ function Auth() {
                         'Content-Type': 'application/json'
                     }
                 );
-                auth.login(responseData.user.id);
+                auth.login(responseData.userId, responseData.token);
             } catch (err) {
 
             }
 
         } else {
             try {
+                const formData = new FormData();
+                formData.append('email', formState.inputs.email.value);
+                formData.append('name', formState.inputs.name.value);
+                formData.append('password', formState.inputs.password.value);
+                formData.append('image', formState.inputs.image.value);
                 const responseData = await sendRequest(
                     'http://localhost:5000/api/users/signup',
                     'POST',
-                    JSON.stringify({
-                        name: formState.inputs.name.value,
-                        email: formState.inputs.email.value,
-                        password: formState.inputs.password.value
-                    }),
-                    {
-                        'Content-Type': 'application/json'
-                    }
+                    formData //FormData automatically adds required header values
                 );
 
-                auth.login(responseData.user.id);
+                auth.login(responseData.userId, responseData.token);
             } catch (err) {
 
             }
@@ -111,7 +114,11 @@ function Auth() {
                         errorText="Please enter a name"
                         onInput={inputHandler}
                     />}
-                    {!isLoginMode && <ImageUpload center id="image" />}
+                    {!isLoginMode &&
+                        (<ImageUpload
+                            center id="image"
+                            onInput={inputHandler}
+                            errorText="Please provide an image." />)}
                     <Input
                         id="email"
                         element="input"

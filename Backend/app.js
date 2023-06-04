@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
@@ -9,6 +12,8 @@ const HttpError = require('./models/http-error');
 const app = express();
 
 app.use(bodyParser.json());
+
+app.use('/uploads/images', express.static(path.join('uploads', 'images'))) //built in express middleware which just return the requested file
 
 app.use((req, res, next) => {  //used to solve error provided by browser 
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,6 +31,12 @@ app.use((req, res, next) => {  //this is for route errors
 });
 
 app.use((error, req, res, next) => {  //will run if any middleware causes error
+    if (req.file) {
+        fs.unlink(req.file.path, (err) => {  //if there is any error, we will not store the file i.e, image and delete it
+            console.log(err);
+        })
+    }
+
     if (res.headerSent) {
         return next(error);
     }

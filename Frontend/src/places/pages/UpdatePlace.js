@@ -66,7 +66,8 @@ function UpdatePlace() {
                     description: formState.inputs.description.value
                 }),
                 {
-                    'Content-type': 'application/json'
+                    'Content-type': 'application/json',
+                    Authorization: 'Bearer ' + auth.token
                 }
             )
             history.push('/' + auth.userId + '/places');

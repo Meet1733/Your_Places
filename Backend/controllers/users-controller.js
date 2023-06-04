@@ -1,4 +1,6 @@
 const { validationResult } = require('express-validator');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const HttpError = require('../models/http-error');
 const User = require('../models/user');
@@ -48,11 +50,22 @@ async function signup(req, res, next) {
         return next(error);
     }
 
+    let hashedPassword;
+    try {                                                 //12 salting round, which is basically strength of hash    
+        hashedPassword = await bcrypt.hash(password, 12); //bcryptjs is a third party library which is used to hash the password
+    } catch (err) {
+        const error = new HttpError(
+            'Could not create user, pleasae try again.',
+            500
+        );
+        return next(error);
+    }
+
     const createdUser = new User({
         name,  //name: name
         email,
-        image: 'https://avatars.githubusercontent.com/u/112953572?v=4',
-        password,
+        image: req.file.path,
+        password: hashedPassword,
         places: []
     })
 
@@ -66,7 +79,22 @@ async function signup(req, res, next) {
         return next(error);
     }
 
-    res.status(201).json({ user: createdUser.toObject({ getters: true }) });
+    let token;
+
+    try {
+        token = jwt.sign(
+            { userId: createdUser.id, email: createdUser.email }, //In jwt first argument is payload, which data we want to encode
+            'supersecret_dont_share', //second argument is private key which only server knows
+            { expiresIn: '1h' }); //in third argument, we can configure the token like expire time
+    } catch (err) {
+        const error = new HttpError(
+            'Signing up failed, please try again',
+            500
+        );
+        return next(error);
+    }
+
+    res.status(201).json({ userId: createdUser.id, email: createdUser.email, token: token });
 }
 
 async function login(req, res, next) {
@@ -83,19 +111,60 @@ async function login(req, res, next) {
         return next(error);
     }
 
-    if (!existingUser || existingUser.password !== password) {
+    if (!existingUser) {
         const error = new HttpError(
-            'Invalid credentials, could not login.', 401
+            'Invalid credentials, could not login.', 403
         )
         return next(error);
     }
 
+    let isValidPassword = false;
+    try {
+        isValidPassword = await bcrypt.compare(password, existingUser.password);
+    } catch (err) {
+        const error = new HttpError(
+            'Could not log you in, please check your credentials and try again.',
+            500
+        );
+        return next(error);
+    }
+
+    if (!isValidPassword) {
+        const error = new HttpError(
+            'Invalid credentials, could not login.', 403
+        )
+        return next(error);
+    }
+
+    let token;
+
+    try {
+        token = jwt.sign(
+            { userId: existingUser.id, email: existingUser.email }, //In jwt first argument is payload, which data we want to encode
+            'supersecret_dont_share', //second argument is private key which only server knows
+            { expiresIn: '1h' }); //in third argument, we can configure the token like expire time
+    } catch (err) {
+        const error = new HttpError(
+            'Logging in failed, please try again',
+            500
+        );
+        return next(error);
+    }
+
     res.json({
-        message: 'Logged in!',
-        user: existingUser.toObject({ getters: true })
+        userId: existingUser.id,
+        email: existingUser.email,
+        token: token
     });
 }
 
 exports.getUsers = getUsers;
 exports.signup = signup;
 exports.login = login;
+
+//while login we check whether the hash password can be generated from entered password or not using bcryptjs
+//Hash password is stored in database
+//If user entered correct email and password then we will generate token
+//for token we will use third party library jsonwebtoken(JWT)
+//we never share private key with any clients
+//private key should be same in login nd signup

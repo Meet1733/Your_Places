@@ -16,8 +16,8 @@ export function useHttpClient() {
         try {
             const response = await fetch(url, {
                 method, // method: method
-                headers,
                 body,
+                headers,
                 signal: httpAbortCtrl.signal
             });
 
