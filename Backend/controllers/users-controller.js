@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const { validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -84,7 +86,7 @@ async function signup(req, res, next) {
     try {
         token = jwt.sign(
             { userId: createdUser.id, email: createdUser.email }, //In jwt first argument is payload, which data we want to encode
-            'supersecret_dont_share', //second argument is private key which only server knows
+            process.env.JWT_KEY, //second argument is private key which only server knows
             { expiresIn: '1h' }); //in third argument, we can configure the token like expire time
     } catch (err) {
         const error = new HttpError(
@@ -141,7 +143,7 @@ async function login(req, res, next) {
     try {
         token = jwt.sign(
             { userId: existingUser.id, email: existingUser.email }, //In jwt first argument is payload, which data we want to encode
-            'supersecret_dont_share', //second argument is private key which only server knows
+            process.env.JWT_KEY, //second argument is private key which only server knows
             { expiresIn: '1h' }); //in third argument, we can configure the token like expire time
     } catch (err) {
         const error = new HttpError(

@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const jwt = require('jsonwebtoken');
 
 const HttpError = require("../models/http-error");
@@ -14,7 +16,7 @@ module.exports = (req, res, next) => {
             throw new Error('Authentication failed!');
         }
 
-        const decodedToken = jwt.verify(token, 'supersecret_dont_share'); //it will return string or object i.e, payload
+        const decodedToken = jwt.verify(token, process.env.JWT_KEY); //it will return string or object i.e, payload
         req.userData = { userId: decodedToken.userId }; //when we created token, we have added userId in payload
         next();
     } catch (err) {

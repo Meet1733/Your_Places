@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const fs = require('fs');
 const path = require('path');
 
@@ -46,7 +48,7 @@ app.use((error, req, res, next) => {  //will run if any middleware causes error
 })
 
 mongoose
-    .connect('mongodb+srv://harsodameet002:WpFrqRRbIBYFGxCs@cluster0.sodeu1r.mongodb.net/mern?retryWrites=true&w=majority')
+    .connect(`mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.sodeu1r.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`)
     .then(() => {
         app.listen(5000);
     })
