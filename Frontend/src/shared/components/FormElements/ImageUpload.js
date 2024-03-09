@@ -14,7 +14,7 @@ function ImageUpload(props) {
         if (!file) {
             return;
         }
-        const fileReader = new FileReader(); //innbuilt in browser
+        const fileReader = new FileReader(); //inbuilt in browser
         fileReader.onload = () => {
             setPreviewUrl(fileReader.result);
         }

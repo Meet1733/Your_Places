@@ -39,10 +39,17 @@ app.use((error, req, res, next) => {  //will run if any middleware causes error
         })
     }
 
+    if (req.file && req.file.path) {
+        fs.unlink(req.file.path, (err) => {
+            if (err) {
+                console.error('Error deleting file:', err);
+            }
+        })
+    }
+
     if (res.headerSent) {
         return next(error);
     }
-
     res.status(error.code || 500);
     res.json({ message: error.message || 'An unknown error occured!' });
 })
@@ -50,7 +57,7 @@ app.use((error, req, res, next) => {  //will run if any middleware causes error
 mongoose
     .connect(`mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.sodeu1r.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`)
     .then(() => {
-        app.listen(5000);
+        app.listen(process.env.PORT || 5000);
     })
     .catch(err => {
         console.log(err);
